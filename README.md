@@ -12,24 +12,24 @@ A tool to detect, enhance, and export whiteboard photos into clear PDF documents
 
 ```bash
 whiteboard-enhancer/
-├── src/
-│   └── whiteboard/          # Python package
-│       ├── __init__.py
-│       ├── processor.py     # Image processing functions
-│       ├── pdf_export.py    # PDF export logic
-│       └── utils.py         # Helper functions
-├── data/                    # Sample whiteboard images (optional)
+├── src/                    # Main source code
+│   ├── whiteboard/          # Image processing logic
+│   │   ├── __init__.py
+│   │   ├── processor.py     # Image processing functions
+│   │   ├── pdf_export.py    # PDF export logic
+│   │   └── utils.py         # Helper functions
+│   ├── examples/            # Demo scripts for testing
+│   │   └── demo.py
+│   ├── data/                # Sample input images
+│   └── output/              # Output processed files
 ├── tests/                   # Unit tests
-│   ├── test_processor.py
-│   ├── test_pdf_export.py
-├── examples/                # Example scripts / notebooks
-│   └── demo.py
+│   ├── test_processor.py    # Test image processing
+│   ├── test_pdf_export.py   # Test PDF export
 ├── .gitignore
 ├── LICENSE
 ├── README.md
 ├── requirements.txt         # Python dependencies
 └── setup.py                 # (optional) Make package pip-installable
-
 
 ## Installation
 
