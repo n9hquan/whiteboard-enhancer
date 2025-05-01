@@ -30,8 +30,9 @@ whiteboard-enhancer/
 ├── README.md
 ├── requirements.txt         # Python dependencies
 └── setup.py                 # (optional) Make package pip-installable
-
+```
 ## Installation
 
 ```bash
 pip install -r requirements.txt
+```
