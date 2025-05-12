@@ -11,27 +11,6 @@ import cv2
 import numpy as np
 
 
-def create_board_type_selector():
-    """
-    Create a dropdown widget for selecting board type
-    
-    Returns:
-        Dropdown widget for board type selection
-    """
-    try:
-        from ipywidgets import Dropdown
-        
-        mode_selector = Dropdown(
-            options=['auto', 'whiteboard', 'smartboard'],
-            value='auto',
-            description='Board type:',
-        )
-        return mode_selector
-    except ImportError:
-        print("This function requires ipywidgets which is only available in notebook environments")
-        return None
-
-
 def create_file_browser():
     """
     Create a file browser dialog to select an image file
