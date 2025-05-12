@@ -1,0 +1,9 @@
+opencv-python>=4.5.0
+numpy>=1.20.0
+img2pdf>=0.4.0
+scikit-image>=0.18.0
+matplotlib>=3.4.0
+ipywidgets>=7.6.0
+# Note: tkinter is part of the standard library in Python
+# but might need to be installed separately on some systems
+# On Ubuntu/Debian: sudo apt-get install python3-tk
