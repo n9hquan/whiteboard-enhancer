@@ -5,12 +5,21 @@ Image enhancement module for whiteboard enhancer.
 import cv2
 
 
-def enhance_whiteboard(image):
+def enhance_whiteboard(image, params=None):
     """
-    Enhance whiteboard: Contrast, binarization, and noise reduction
+    Enhance whiteboard: Denoising, contrast enhancement, and thresholding
     
     Args:
         image: Input image (BGR format)
+        params: Dictionary of enhancement parameters (optional)
+            - denoise_h: Denoising strength (default: 10)
+            - clahe_clip: CLAHE clip limit (default: 2.0)
+            - clahe_grid: CLAHE grid size (default: 8)
+            - adaptive_block: Adaptive threshold block size (default: 15)
+            - adaptive_c: Adaptive threshold C value (default: 9)
+            - use_adaptive: Whether to use adaptive thresholding (default: True)
+            - threshold: Global threshold value (default: 160)
+            - blur_size: Final blur kernel size (default: 3)
         
     Returns:
         Enhanced grayscale image
@@ -20,10 +29,10 @@ def enhance_whiteboard(image):
         'denoise_h': 10,
         'clahe_clip': 2.0,
         'clahe_grid': 8,
-        'adaptive_block': 11,  # Decreased from 15 for finer detail
-        'adaptive_c': 5,       # Decreased from 9 for less aggressive thresholding
+        'adaptive_block': 15,
+        'adaptive_c': 9,
         'use_adaptive': True,
-        'threshold': 140,       # Decreased from 160 for better text capture
+        'threshold': 160,
         'blur_size': 3
     }
     
@@ -81,10 +90,10 @@ def enhance_whiteboard_color(image, params=None):
         'denoise_h': 10,
         'clahe_clip': 2.0,
         'clahe_grid': 8,
-        'adaptive_block': 11,  # Decreased for finer detail
-        'adaptive_c': 5,       # Decreased for less aggressive thresholding
+        'adaptive_block': 15,
+        'adaptive_c': 9,
         'use_adaptive': True,
-        'threshold': 0,       # Decreased for better text capture
+        'threshold': 160,
         'blur_size': 3,
         'saturation_boost': 1.2  # Boost colors slightly
     }
