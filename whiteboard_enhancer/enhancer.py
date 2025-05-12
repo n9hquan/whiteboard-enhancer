@@ -29,10 +29,10 @@ def enhance_whiteboard(image, params=None):
         'denoise_h': 10,
         'clahe_clip': 2.0,
         'clahe_grid': 8,
-        'adaptive_block': 15,
-        'adaptive_c': 9,
+        'adaptive_block': 11,  # Decreased from 15 for finer detail
+        'adaptive_c': 5,       # Decreased from 9 for less aggressive thresholding
         'use_adaptive': True,
-        'threshold': 160,
+        'threshold': 140,       # Decreased from 160 for better text capture
         'blur_size': 3
     }
     
@@ -90,10 +90,10 @@ def enhance_whiteboard_color(image, params=None):
         'denoise_h': 10,
         'clahe_clip': 2.0,
         'clahe_grid': 8,
-        'adaptive_block': 15,
-        'adaptive_c': 9,
+        'adaptive_block': 11,  # Decreased for finer detail
+        'adaptive_c': 5,       # Decreased for less aggressive thresholding
         'use_adaptive': True,
-        'threshold': 160,
+        'threshold': 0,       # Decreased for better text capture
         'blur_size': 3,
         'saturation_boost': 1.2  # Boost colors slightly
     }
