@@ -1,430 +1,195 @@
-"""
-GUI application for the whiteboard enhancer.
-"""
-
-import os
-import tkinter as tk
-from tkinter import filedialog, ttk, messagebox
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import cv2
 import numpy as np
-import threading
+import img2pdf
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+import os
 
-from whiteboard_enhancer.detector import detect_board
-from whiteboard_enhancer.transformer import four_point_transform
-from whiteboard_enhancer.enhancer import enhance_whiteboard
-from whiteboard_enhancer.utils import save_as_pdf
+# ----- Image Processing Functions -----
 
+def detect_board(image):
+    img_area = image.shape[0] * image.shape[1]
 
-class WhiteboardEnhancerApp:
-    """Main GUI application for the whiteboard enhancer."""
-    
+    def whiteboard_detector():
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        edges = cv2.Canny(blurred, 50, 150)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+        dilated = cv2.dilate(edges, kernel, iterations=2)
+        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:5]
+        for contour in contours:
+            peri = cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
+            if len(approx) == 4 and cv2.contourArea(approx) > 0.05 * img_area:
+                return approx
+        return None
+
+    def smartboard_detector():
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        lower = np.array([0, 0, 0])
+        upper = np.array([180, 255, 70])
+        mask = cv2.inRange(hsv, lower, upper)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+        dilated = cv2.dilate(mask, kernel, iterations=2)
+        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:5]
+        for contour in contours:
+            peri = cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
+            if len(approx) == 4 and cv2.contourArea(approx) > 0.05 * img_area:
+                return approx
+        return None
+
+    contour = whiteboard_detector()
+    if contour is not None:
+        return contour
+
+    contour = smartboard_detector()
+    if contour is not None:
+        return contour
+
+    return None
+
+def four_point_transform(image, pts):
+    pts = pts.reshape(4, 2)
+    rect = np.zeros((4, 2), dtype="float32")
+
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
+
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
+
+    (tl, tr, br, bl) = rect
+
+    widthA = np.linalg.norm(br - bl)
+    widthB = np.linalg.norm(tr - tl)
+    maxWidth = int(max(widthA, widthB))
+
+    heightA = np.linalg.norm(tr - br)
+    heightB = np.linalg.norm(tl - bl)
+    maxHeight = int(max(heightA, heightB))
+
+    dst = np.array([
+        [0, 0],
+        [maxWidth - 1, 0],
+        [maxWidth - 1, maxHeight - 1],
+        [0, maxHeight - 1]], dtype="float32")
+
+    M = cv2.getPerspectiveTransform(rect, dst)
+    warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
+
+    return warped
+
+def enhance_whiteboard(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    enhanced = clahe.apply(gray)
+    enhanced = cv2.adaptiveThreshold(enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                      cv2.THRESH_BINARY, 15, 9)
+    enhanced = cv2.medianBlur(enhanced, 3)
+    return enhanced
+
+def save_as_pdf(image, filename):
+    if len(image.shape) == 2:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    else:
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    temp_img = 'temp_save.jpg'
+    cv2.imwrite(temp_img, image)
+
+    with open(filename, "wb") as f:
+        f.write(img2pdf.convert(temp_img))
+
+    os.remove(temp_img)
+
+# ----- GUI Functions -----
+
+class WhiteboardScannerGUI:
     def __init__(self, root):
-        """Initialize the application."""
         self.root = root
-        self.root.title("Whiteboard Enhancer")
-        self.root.geometry("1200x800")
-        self.root.minsize(1000, 700)
-        
-        # Variables
-        self.image_path = None
-        self.original_image = None
+        self.root.title("Whiteboard Scanner to PDF")
+        self.image = None
         self.contour = None
-        self.warped_image = None
-        self.enhanced_image = None
-        self.mode_var = tk.StringVar(value="auto")
-        self.display_mode_var = tk.StringVar(value="color")
-        self.result_type_var = tk.StringVar(value="enhanced")
-        
-        # Create UI
-        self.create_menu()
-        self.create_toolbar()
-        self.create_main_content()
-        self.create_status_bar()
-        
-        # Settings panel (initially hidden)
-        self.settings_panel = None
-        
-        # Initial state
-        self.update_ui_state(False)
-    
-    def create_menu(self):
-        """Create the menu bar."""
-        menu_bar = tk.Menu(self.root)
-        
-        # File menu
-        file_menu = tk.Menu(menu_bar, tearoff=0)
-        file_menu.add_command(label="Open Image", command=self.browse_image)
-        file_menu.add_command(label="Process Image", command=self.process_all)
-        file_menu.add_separator()
-        file_menu.add_command(label="Save Color PDF", command=lambda: self.save_pdf(False))
-        file_menu.add_command(label="Save Enhanced PDF", command=lambda: self.save_pdf(True))
-        file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self.root.quit)
-        menu_bar.add_cascade(label="File", menu=file_menu)
-        
-        # Help menu
-        help_menu = tk.Menu(menu_bar, tearoff=0)
-        help_menu.add_command(label="About", command=self.show_about)
-        menu_bar.add_cascade(label="Help", menu=help_menu)
-        
-        self.root.config(menu=menu_bar)
-    
-    def create_toolbar(self):
-        """Create the toolbar with processing options."""
-        toolbar_frame = ttk.Frame(self.root)
-        toolbar_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        # Browse button
-        browse_btn = ttk.Button(toolbar_frame, text="Browse Image", command=self.browse_image)
-        browse_btn.pack(side=tk.LEFT, padx=5)
-        
-        # Process button
-        process_btn = ttk.Button(toolbar_frame, text="Process Image", command=self.process_all)
-        process_btn.pack(side=tk.LEFT, padx=5)
-        
-        # Display mode
-        ttk.Label(toolbar_frame, text="Display Mode:").pack(side=tk.RIGHT, padx=(5, 5))
-        display_combo = ttk.Combobox(toolbar_frame, textvariable=self.display_mode_var, 
-                                    values=["raw color", "binary"],
-                                    width=10, state="readonly")
-        display_combo.pack(side=tk.RIGHT, padx=5)
-        display_combo.bind("<<ComboboxSelected>>", lambda e: self.update_display())
-    
-    def create_main_content(self):
-        """Create the main content area with image display."""
-        # Main frame
-        main_frame = ttk.Frame(self.root)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        # Image display area (2x2 grid for all processing steps)
-        self.fig = plt.figure(figsize=(12, 8))
-        self.axes = self.fig.subplots(2, 2)
-        self.fig.suptitle("Whiteboard Enhancement Process", fontsize=14)
-        
-        # Set up the initial empty plots with titles
-        self.axes[0, 0].set_title("Original Image")
-        self.axes[0, 1].set_title("Contour Detection")
-        self.axes[1, 0].set_title("Perspective Corrected")
-        self.axes[1, 1].set_title("Enhanced Result")
-        
-        # Turn off axes for all subplots and set gray background
-        for row in self.axes:
-            for ax in row:
-                ax.axis('off')
-                ax.imshow(np.ones((10, 10, 3)) * 0.8, cmap='gray')
-                ax.text(0.5, 0.5, "No Image", ha='center', va='center', fontsize=12)
-        
-        # Embed the matplotlib figure in tkinter
-        self.canvas = FigureCanvasTkAgg(self.fig, master=main_frame)
-        self.canvas.draw()
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-    
-    def create_status_bar(self):
-        """Create the status bar."""
-        self.status_var = tk.StringVar(value="Ready")
-        status_bar = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
-        status_bar.pack(side=tk.BOTTOM, fill=tk.X)
-    
+        self.warped = None
+        self.enhanced = None
+
+        tk.Button(root, text="Browse Image", command=self.browse_image, width=20).pack(pady=5)
+        tk.Button(root, text="Save Color PDF", command=self.save_color_pdf, width=20).pack(pady=5)
+        tk.Button(root, text="Save Enhanced PDF", command=self.save_enhanced_pdf, width=20).pack(pady=5)
+
+        self.figure, self.axs = plt.subplots(2, 2, figsize=(10,8))
+        plt.tight_layout()
+        self.canvas = FigureCanvasTkAgg(self.figure, master=root)
+        self.canvas.get_tk_widget().pack()
+
     def browse_image(self):
-        """Open a file dialog to browse for an image."""
-        file_path = filedialog.askopenfilename(
-            title="Select Whiteboard Image",
-            filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp"), ("All files", "*.*")]
-        )
-        
+        file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png")])
         if not file_path:
             return
-        
-        try:
-            self.image_path = file_path
-            self.original_image = cv2.imread(file_path)
-            
-            if self.original_image is None:
-                messagebox.showerror("Error", "Could not read the image file.")
-                return
-            
-            # Reset processing state
-            self.contour = None
-            self.warped_image = None
-            self.enhanced_image = None
-            
-            # Update UI
-            self.update_ui_state(True)
-            self.status_var.set(f"Loaded image: {os.path.basename(file_path)}")
-            
-            # Display original image
-            self.update_display()
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error loading image: {str(e)}")
-    
-    def detect_board(self):
-        """Detect the whiteboard in the image."""
-        if self.original_image is None:
-            messagebox.showinfo("Info", "Please load an image first.")
-            return
-        
-        self.status_var.set("Detecting board...")
-        self.root.update()
-        
-        try:
-            mode = self.mode_var.get()
-            self.contour = detect_board(self.original_image, mode)
-            
-            if self.contour is None:
-                messagebox.showwarning("Warning", "Could not detect whiteboard edges.")
-                self.status_var.set("Board detection failed.")
-                return
-            
-            # Transform the image
-            self.warped_image = four_point_transform(self.original_image, self.contour)
-            self.status_var.set("Board detected and transformed.")
-            
-            # Update display
-            self.update_display()
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error detecting board: {str(e)}")
-            self.status_var.set("Error in board detection.")
-    
-    def enhance_image(self):
-        """Enhance the warped image."""
-        if self.warped_image is None:
-            messagebox.showinfo("Info", "Please detect the board first.")
-            return
-        
-        self.status_var.set("Enhancing image...")
-        self.root.update()
-        
-        try:
-            # Apply enhancement with default parameters
-            self.enhanced_image = enhance_whiteboard(self.warped_image)
-            self.status_var.set("Image enhanced.")
-            
-            # Update display
-            self.update_display()
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error enhancing image: {str(e)}")
-            self.status_var.set("Error in image enhancement.")
-    
 
+        self.image = cv2.imread(file_path)
+        self.contour = detect_board(self.image)
 
-    
-    def process_all(self):
-        """Process the image through all steps."""
-        if self.original_image is None:
-            messagebox.showinfo("Info", "Please load an image first.")
+        if self.contour is None:
+            messagebox.showerror("Error", "Could not detect whiteboard contour.")
             return
-        
-        # Run in a separate thread to keep UI responsive
-        threading.Thread(target=self._process_all_thread, daemon=True).start()
-    
-    def _process_all_thread(self):
-        """Background thread for processing."""
-        try:
-            self.status_var.set("Detecting board...")
-            self.root.update()
-            
-            mode = self.mode_var.get()
-            self.contour = detect_board(self.original_image, mode)
-            
-            if self.contour is None:
-                self.root.after(0, lambda: messagebox.showwarning("Warning", "Could not detect whiteboard edges."))
-                self.status_var.set("Board detection failed.")
-                return
-            
-            self.status_var.set("Transforming image...")
-            self.root.update()
-            self.warped_image = four_point_transform(self.original_image, self.contour)
-            
-            self.status_var.set("Enhancing image...")
-            self.root.update()
-            
-            # Apply enhancement with default parameters
-            self.enhanced_image = enhance_whiteboard(self.warped_image)
-            
-            self.status_var.set("Processing complete.")
-            
-            # Update display in the main thread
-            self.root.after(0, self.update_display)
-            
-            # Automatically show all steps after successful processing
-            self.root.after(100, self.show_all_steps)
-            
-        except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Error", f"Error processing image: {str(e)}"))
-            self.status_var.set("Error in processing.")
-    
+
+        self.warped = four_point_transform(self.image, self.contour)
+        self.enhanced = enhance_whiteboard(self.warped)
+        self.update_display()
+
     def update_display(self):
-        """Update the image display based on current state."""
-        # This method now just calls show_all_steps to display all processing steps
-        self.show_all_steps()
-    
-    def show_all_steps(self):
-        """Show all processing steps in the main window."""
-        if self.original_image is None:
-            messagebox.showinfo("Info", "Please load an image first.")
-            return
-        
-        # Clear the figure completely
-        plt.figure(self.fig.number)
-        plt.clf()
-        
-        # Re-create the axes as a 2x2 grid for all steps
-        self.axes = self.fig.subplots(2, 2)
-        self.fig.suptitle("Whiteboard Enhancement Process", fontsize=14)
-        
-        # Turn off axes for all subplots
-        for row in self.axes:
-            for ax in row:
-                ax.axis('off')
-        
-        # Original image
-        self.axes[0, 0].set_title("Original Image")
-        self.axes[0, 0].imshow(cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB))
-        
-        # Contour detection
-        self.axes[0, 1].set_title("Contour Detection")
-        if self.contour is not None:
-            # Draw contour on a copy of the original image
-            contour_img = self.original_image.copy()
-            cv2.drawContours(contour_img, [self.contour], -1, (0, 255, 0), 3)
-            self.axes[0, 1].imshow(cv2.cvtColor(contour_img, cv2.COLOR_BGR2RGB))
-        else:
-            self.axes[0, 1].imshow(np.ones((10, 10, 3)) * 0.8)
-            self.axes[0, 1].text(0.5, 0.5, "No contour detected", 
-                    ha='center', va='center', transform=self.axes[0, 1].transAxes, 
-                    fontsize=12)
-        
-        # Warped image
-        self.axes[1, 0].set_title("Perspective Corrected")
-        if self.warped_image is not None:
-            self.axes[1, 0].imshow(cv2.cvtColor(self.warped_image, cv2.COLOR_BGR2RGB))
-        else:
-            self.axes[1, 0].imshow(np.ones((10, 10, 3)) * 0.8)
-            self.axes[1, 0].text(0.5, 0.5, "Not transformed", 
-                    ha='center', va='center', transform=self.axes[1, 0].transAxes, 
-                    fontsize=12)
-        
-        # Enhanced image
-        self.axes[1, 1].set_title("Enhanced Result")
-        display_mode = self.display_mode_var.get()
-        if self.enhanced_image is not None:
-            if display_mode == "binary":
-                self.axes[1, 1].imshow(self.enhanced_image, cmap='gray')
-            else:  # raw color
-                color_enhanced = cv2.cvtColor(self.enhanced_image, cv2.COLOR_GRAY2BGR)
-                self.axes[1, 1].imshow(cv2.cvtColor(color_enhanced, cv2.COLOR_BGR2RGB))
-        else:
-            self.axes[1, 1].imshow(np.ones((10, 10, 3)) * 0.8)
-            self.axes[1, 1].text(0.5, 0.5, "Not processed", 
-                    ha='center', va='center', transform=self.axes[1, 1].transAxes, 
-                    fontsize=12)
-        
-        # Update the canvas
-        self.fig.tight_layout()
+        self.axs[0,0].clear()
+        self.axs[0,0].set_title("Original Image")
+        self.axs[0,0].imshow(cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB))
+        self.axs[0,0].axis('off')
+
+        debug_image = self.image.copy()
+        cv2.drawContours(debug_image, [self.contour], -1, (0,255,0), 3)
+        self.axs[0,1].clear()
+        self.axs[0,1].set_title("Contour Detection")
+        self.axs[0,1].imshow(cv2.cvtColor(debug_image, cv2.COLOR_BGR2RGB))
+        self.axs[0,1].axis('off')
+
+        self.axs[1,0].clear()
+        self.axs[1,0].set_title("Perspective Corrected")
+        self.axs[1,0].imshow(cv2.cvtColor(self.warped, cv2.COLOR_BGR2RGB))
+        self.axs[1,0].axis('off')
+
+        self.axs[1,1].clear()
+        self.axs[1,1].set_title("Enhanced (Binarized)")
+        self.axs[1,1].imshow(self.enhanced, cmap='gray')
+        self.axs[1,1].axis('off')
+
         self.canvas.draw()
-    
-    def save_pdf(self, enhanced=False):
-        """Save the processed image as PDF."""
-        if enhanced and self.enhanced_image is None:
-            messagebox.showinfo("Info", "Please enhance the image first.")
+
+    def save_color_pdf(self):
+        if self.warped is None:
+            messagebox.showerror("Error", "Please load an image first.")
             return
-        elif not enhanced and self.warped_image is None:
-            messagebox.showinfo("Info", "Please process the image first.")
+        file_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
+        if file_path:
+            save_as_pdf(self.warped, file_path)
+            messagebox.showinfo("Saved", f"Color PDF saved at:\n{file_path}")
+
+    def save_enhanced_pdf(self):
+        if self.enhanced is None:
+            messagebox.showerror("Error", "Please load an image first.")
             return
-        
-        # Get save path
-        default_name = os.path.splitext(os.path.basename(self.image_path))[0]
-        if enhanced:
-            default_name = f"enhanced_{default_name}"
-        
-        save_path = filedialog.asksaveasfilename(
-            title="Save PDF",
-            defaultextension=".pdf",
-            initialfile=f"{default_name}.pdf",
-            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
-        )
-        
-        if not save_path:
-            return
-        
-        try:
-            self.status_var.set("Saving PDF...")
-            self.root.update()
-            
-            image_to_save = self.enhanced_image if enhanced else self.warped_image
-            
-            # If enhanced image is grayscale, convert to BGR for saving
-            if enhanced and len(image_to_save.shape) == 2:
-                image_to_save = cv2.cvtColor(image_to_save, cv2.COLOR_GRAY2BGR)
-            
-            # Save as PDF
-            save_as_pdf(image_to_save, save_path)
-            
-            self.status_var.set(f"PDF saved to: {save_path}")
-            messagebox.showinfo("Success", f"PDF saved successfully to:\n{save_path}")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error saving PDF: {str(e)}")
-            self.status_var.set("Error saving PDF.")
-    
-    def update_ui_state(self, has_image):
-        """Update the UI state based on whether an image is loaded."""
-        # In some Tkinter versions, the 'state' option may not be supported for menu items
-        # So we'll use a try-except block to handle this gracefully
-        try:
-            state = "normal" if has_image else "disabled"
-            
-            # Update menu items
-            menu = self.root.nametowidget(self.root["menu"])
-            
-            # Process menu
-            process_menu = menu.nametowidget(menu.entrycget(1, "menu"))
-            for i in range(3):  # Process menu items
-                try:
-                    process_menu.entryconfig(i, state=state)
-                except tk.TclError:
-                    # If state option is not supported, we'll just skip it
-                    pass
-            
-            # File menu
-            file_menu = menu.nametowidget(menu.entrycget(0, "menu"))
-            for i in range(2, 4):  # Save PDF menu items
-                try:
-                    file_menu.entryconfig(i, state=state)
-                except tk.TclError:
-                    # If state option is not supported, we'll just skip it
-                    pass
-        except Exception:
-            # If there's any error with menu configuration, just ignore it
-            # This ensures the application can still run even if menu state can't be updated
-            pass
-    
-    def show_about(self):
-        """Show the about dialog."""
-        messagebox.showinfo(
-            "About Whiteboard Enhancer",
-            "Whiteboard Enhancer v1.0\n\n"
-            "A tool for scanning, enhancing, and converting whiteboard images to PDF.\n\n"
-            "Features:\n"
-            "- Automatic whiteboard/smartboard detection\n"
-            "- Perspective correction\n"
-            "- Image enhancement\n"
-            "- PDF conversion\n\n"
-            "© 2025 Whiteboard Enhancer Team"
-        )
+        file_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
+        if file_path:
+            save_as_pdf(self.enhanced, file_path)
+            messagebox.showinfo("Saved", f"Enhanced PDF saved at:\n{file_path}")
 
-
-def run_gui():
-    """Run the GUI application."""
-    root = tk.Tk()
-    app = WhiteboardEnhancerApp(root)
-    root.mainloop()
-
-
+# ----- Main -----
 if __name__ == "__main__":
-    run_gui()
+    root = tk.Tk()
+    app = WhiteboardScannerGUI(root)
+    root.mainloop()
