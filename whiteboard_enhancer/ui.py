@@ -108,7 +108,7 @@ def display_processing_steps(original, contour, warped, enhanced, filename=None)
         axes[1, 1].text(0.5, 0.5, "Enhancement failed", 
                        horizontalalignment='center', verticalalignment='center',
                        transform=axes[1, 1].transAxes, fontsize=12, color='red')
-    axes[1, 1].set_title("Enhanced Image")
+    axes[1, 1].set_title("Result Image")
     axes[1, 1].axis('off')
     
     plt.tight_layout()
