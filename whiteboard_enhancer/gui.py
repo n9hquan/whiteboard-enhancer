@@ -108,18 +108,6 @@ class WhiteboardEnhancerApp:
                                     width=10, state="readonly")
         display_combo.pack(side=tk.RIGHT, padx=5)
         display_combo.bind("<<ComboboxSelected>>", lambda e: self.update_display())
-        
-        # Settings button
-        settings_btn = ttk.Button(toolbar_frame, text="Threshold Settings", command=self.toggle_settings_panel)
-        settings_btn.pack(side=tk.LEFT, padx=20)
-        
-        # Show all steps button
-        show_steps_btn = ttk.Button(toolbar_frame, text="Show All Steps", command=self.show_all_steps)
-        show_steps_btn.pack(side=tk.RIGHT, padx=5)
-        
-        # Process button
-        process_btn = ttk.Button(toolbar_frame, text="Process Image", command=self.process_all)
-        process_btn.pack(side=tk.RIGHT, padx=5)
     
     def create_main_content(self):
         """Create the main content area with image display."""
@@ -497,54 +485,8 @@ class WhiteboardEnhancerApp:
     
     def update_display(self):
         """Update the image display based on current state."""
-        # Clear the figure completely
-        plt.figure(self.fig.number)
-        plt.clf()
-        
-        # Re-create the axes
-        self.axes = self.fig.subplots(1, 2)
-        self.fig.subplots_adjust(hspace=0.1, wspace=0.1)
-        
-        # Turn off axes for both subplots
-        for ax in self.axes:
-            ax.axis('off')
-        
-        # Set titles
-        self.axes[0].set_title("Original Image")
-        
-        # Get display settings
-        display_mode = self.display_mode_var.get()
-        
-        # Original image
-        if self.original_image is not None:
-            self.axes[0].imshow(cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB))
-        else:
-            self.axes[0].imshow(np.ones((10, 10, 3)) * 0.8)
-            self.axes[0].text(0.5, 0.5, "No Image", ha='center', va='center', fontsize=12)
-        
-        # Result image
-        if self.warped_image is not None:
-            if display_mode == "color":
-                # Show raw color of the cropped whiteboard
-                self.axes[1].set_title("Cropped Whiteboard (Raw Color)")
-                self.axes[1].imshow(cv2.cvtColor(self.warped_image, cv2.COLOR_BGR2RGB))
-            else:  # binary
-                # Show enhanced binary version
-                if self.enhanced_image is not None:
-                    self.axes[1].set_title("Enhanced Binary Result")
-                    self.axes[1].imshow(self.enhanced_image, cmap='gray')
-                else:
-                    # If enhanced image is not available, show warped anyway
-                    self.axes[1].set_title("Cropped Whiteboard")
-                    self.axes[1].imshow(cv2.cvtColor(self.warped_image, cv2.COLOR_BGR2RGB))
-        else:
-            self.axes[1].set_title("Result")
-            self.axes[1].imshow(np.ones((10, 10, 3)) * 0.8)
-            self.axes[1].text(0.5, 0.5, "Not processed", ha='center', va='center', fontsize=12)
-        
-        # Update the canvas
-        self.fig.tight_layout()
-        self.canvas.draw()
+        # This method now just calls show_all_steps to display all processing steps
+        self.show_all_steps()
     
     def show_all_steps(self):
         """Show all processing steps in the main window."""
