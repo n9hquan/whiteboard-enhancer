@@ -35,6 +35,7 @@ class WhiteboardEnhancerApp:
         self.enhanced_image = None
         self.mode_var = tk.StringVar(value="auto")
         self.display_mode_var = tk.StringVar(value="color")
+        self.result_type_var = tk.StringVar(value="enhanced")
         
         # Create UI
         self.create_menu()
@@ -82,13 +83,6 @@ class WhiteboardEnhancerApp:
         browse_btn = ttk.Button(toolbar_frame, text="Browse Image", command=self.browse_image)
         browse_btn.pack(side=tk.LEFT, padx=5)
         
-        # Mode selection
-        ttk.Label(toolbar_frame, text="Board Type:").pack(side=tk.LEFT, padx=(20, 5))
-        mode_combo = ttk.Combobox(toolbar_frame, textvariable=self.mode_var, 
-                                  values=["auto", "whiteboard", "smartboard"],
-                                  width=12, state="readonly")
-        mode_combo.pack(side=tk.LEFT, padx=5)
-        
         # Display mode
         ttk.Label(toolbar_frame, text="Display Mode:").pack(side=tk.LEFT, padx=(20, 5))
         display_combo = ttk.Combobox(toolbar_frame, textvariable=self.display_mode_var, 
@@ -97,7 +91,11 @@ class WhiteboardEnhancerApp:
         display_combo.pack(side=tk.LEFT, padx=5)
         display_combo.bind("<<ComboboxSelected>>", lambda e: self.update_display())
         
-        # Process buttons
+        # Show all steps button
+        show_steps_btn = ttk.Button(toolbar_frame, text="Show All Steps", command=self.show_all_steps)
+        show_steps_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Process button
         process_btn = ttk.Button(toolbar_frame, text="Process Image", command=self.process_all)
         process_btn.pack(side=tk.RIGHT, padx=5)
     
@@ -107,17 +105,15 @@ class WhiteboardEnhancerApp:
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        # Image display area (2x2 grid)
-        self.fig, self.axes = plt.subplots(2, 2, figsize=(12, 8))
-        self.fig.subplots_adjust(hspace=0.3, wspace=0.3)
+        # Image display area (1x2 grid - original and result)
+        self.fig, self.axes = plt.subplots(1, 2, figsize=(12, 6))
+        self.fig.subplots_adjust(hspace=0.1, wspace=0.1)
         
         # Set up the initial empty plots with titles
-        self.axes[0, 0].set_title("Original Image")
-        self.axes[0, 1].set_title("Contour Detection")
-        self.axes[1, 0].set_title("Perspective Correction")
-        self.axes[1, 1].set_title("Enhanced Image")
+        self.axes[0].set_title("Original Image")
+        self.axes[1].set_title("Result")
         
-        for ax in self.axes.flat:
+        for ax in self.axes:
             ax.axis('off')
             # Set a gray background for empty plots
             ax.imshow(np.ones((10, 10, 3)) * 0.8, cmap='gray')
@@ -259,62 +255,109 @@ class WhiteboardEnhancerApp:
     def update_display(self):
         """Update the image display based on current state."""
         # Clear all axes
-        for ax in self.axes.flat:
+        for ax in self.axes:
             ax.clear()
             ax.axis('off')
         
         # Set titles
-        self.axes[0, 0].set_title("Original Image")
-        self.axes[0, 1].set_title("Contour Detection")
-        self.axes[1, 0].set_title("Perspective Correction")
-        self.axes[1, 1].set_title("Enhanced Image")
+        self.axes[0].set_title("Original Image")
         
-        # Display mode
+        # Get display settings
         display_mode = self.display_mode_var.get()
         
         # Original image
         if self.original_image is not None:
-            self.axes[0, 0].imshow(cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB))
+            self.axes[0].imshow(cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB))
         else:
-            self.axes[0, 0].imshow(np.ones((10, 10, 3)) * 0.8)
-            self.axes[0, 0].text(0.5, 0.5, "No Image", ha='center', va='center', fontsize=12)
+            self.axes[0].imshow(np.ones((10, 10, 3)) * 0.8)
+            self.axes[0].text(0.5, 0.5, "No Image", ha='center', va='center', fontsize=12)
         
-        # Contour detection
-        if self.original_image is not None:
-            if self.contour is not None:
-                debug_image = self.original_image.copy()
-                cv2.drawContours(debug_image, [self.contour], -1, (0, 255, 0), 3)
-                self.axes[0, 1].imshow(cv2.cvtColor(debug_image, cv2.COLOR_BGR2RGB))
-            else:
-                self.axes[0, 1].imshow(cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB))
-                self.axes[0, 1].text(0.5, 0.5, "No contour detected", 
-                                   ha='center', va='center', fontsize=12, color='red')
-        else:
-            self.axes[0, 1].imshow(np.ones((10, 10, 3)) * 0.8)
-            self.axes[0, 1].text(0.5, 0.5, "No Image", ha='center', va='center', fontsize=12)
-        
-        # Warped image
+        # Result image
         if self.warped_image is not None:
-            self.axes[1, 0].imshow(cv2.cvtColor(self.warped_image, cv2.COLOR_BGR2RGB))
+            if display_mode == "color":
+                # Show raw color of the cropped whiteboard
+                self.axes[1].set_title("Cropped Whiteboard (Raw Color)")
+                self.axes[1].imshow(cv2.cvtColor(self.warped_image, cv2.COLOR_BGR2RGB))
+            else:  # binary
+                # Show enhanced binary version
+                if self.enhanced_image is not None:
+                    self.axes[1].set_title("Enhanced Binary Result")
+                    self.axes[1].imshow(self.enhanced_image, cmap='gray')
+                else:
+                    # If enhanced image is not available, show warped anyway
+                    self.axes[1].set_title("Cropped Whiteboard")
+                    self.axes[1].imshow(cv2.cvtColor(self.warped_image, cv2.COLOR_BGR2RGB))
         else:
-            self.axes[1, 0].imshow(np.ones((10, 10, 3)) * 0.8)
-            self.axes[1, 0].text(0.5, 0.5, "Not processed", ha='center', va='center', fontsize=12)
-        
-        # Enhanced image
-        if self.enhanced_image is not None:
-            if display_mode == "binary":
-                self.axes[1, 1].imshow(self.enhanced_image, cmap='gray')
-            else:  # color
-                # For color display of the enhanced image, we convert back to BGR
-                color_enhanced = cv2.cvtColor(self.enhanced_image, cv2.COLOR_GRAY2BGR)
-                self.axes[1, 1].imshow(cv2.cvtColor(color_enhanced, cv2.COLOR_BGR2RGB))
-        else:
-            self.axes[1, 1].imshow(np.ones((10, 10, 3)) * 0.8)
-            self.axes[1, 1].text(0.5, 0.5, "Not processed", ha='center', va='center', fontsize=12)
+            self.axes[1].set_title("Result")
+            self.axes[1].imshow(np.ones((10, 10, 3)) * 0.8)
+            self.axes[1].text(0.5, 0.5, "Not processed", ha='center', va='center', fontsize=12)
         
         # Update the canvas
         self.fig.tight_layout()
         self.canvas.draw()
+    
+    def show_all_steps(self):
+        """Show all processing steps in a separate window."""
+        if self.original_image is None:
+            messagebox.showinfo("Info", "Please load an image first.")
+            return
+        
+        # Create a new figure with all processing steps
+        plt.figure(figsize=(12, 10))
+        plt.suptitle("All Processing Steps", fontsize=16)
+        
+        # Original image
+        plt.subplot(2, 2, 1)
+        plt.title("Original Image")
+        plt.imshow(cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB))
+        plt.axis('off')
+        
+        # Contour detection
+        plt.subplot(2, 2, 2)
+        plt.title("Contour Detection")
+        if self.contour is not None:
+            debug_image = self.original_image.copy()
+            cv2.drawContours(debug_image, [self.contour], -1, (0, 255, 0), 3)
+            plt.imshow(cv2.cvtColor(debug_image, cv2.COLOR_BGR2RGB))
+        else:
+            plt.imshow(cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB))
+            plt.text(0.5, 0.5, "No contour detected", 
+                    ha='center', va='center', transform=plt.gca().transAxes, 
+                    fontsize=12, color='red')
+        plt.axis('off')
+        
+        # Warped image
+        plt.subplot(2, 2, 3)
+        plt.title("Perspective Correction")
+        if self.warped_image is not None:
+            plt.imshow(cv2.cvtColor(self.warped_image, cv2.COLOR_BGR2RGB))
+        else:
+            plt.imshow(np.ones((10, 10, 3)) * 0.8)
+            plt.text(0.5, 0.5, "Not processed", 
+                    ha='center', va='center', transform=plt.gca().transAxes, 
+                    fontsize=12)
+        plt.axis('off')
+        
+        # Enhanced image
+        plt.subplot(2, 2, 4)
+        plt.title("Enhanced Image")
+        if self.enhanced_image is not None:
+            display_mode = self.display_mode_var.get()
+            if display_mode == "binary":
+                plt.imshow(self.enhanced_image, cmap='gray')
+            else:  # color
+                color_enhanced = cv2.cvtColor(self.enhanced_image, cv2.COLOR_GRAY2BGR)
+                plt.imshow(cv2.cvtColor(color_enhanced, cv2.COLOR_BGR2RGB))
+        else:
+            plt.imshow(np.ones((10, 10, 3)) * 0.8)
+            plt.text(0.5, 0.5, "Not processed", 
+                    ha='center', va='center', transform=plt.gca().transAxes, 
+                    fontsize=12)
+        plt.axis('off')
+        
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.9)  # Make room for the suptitle
+        plt.show()
     
     def save_pdf(self, enhanced=False):
         """Save the processed image as PDF."""
