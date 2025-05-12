@@ -8,27 +8,6 @@ import img2pdf
 import os
 
 
-def upload_image():
-    """
-    Upload an image file through Colab interface
-    
-    Returns:
-        Tuple of (image, filename) or (None, None) if no file was uploaded
-    """
-    try:
-        from google.colab import files
-        uploaded = files.upload()
-        for filename in uploaded.keys():
-            print(f'Uploaded {filename}')
-            # Read the image with cv2.imdecode (flags=1 means color image)
-            image = cv2.imdecode(np.frombuffer(uploaded[filename], np.uint8), 1)
-            return image, filename
-        return None, None
-    except ImportError:
-        print("This function is only available in Google Colab")
-        return None, None
-
-
 def save_as_pdf(image, filename):
     """
     Save image as PDF

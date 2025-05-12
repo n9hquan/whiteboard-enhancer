@@ -7,16 +7,7 @@ import numpy as np
 
 
 def detect_board(image, mode='auto'):
-    """
-    Detect board contour based on mode: whiteboard / smartboard / auto
-    
-    Args:
-        image: Input image (BGR format)
-        mode: Detection mode - 'auto', 'whiteboard', or 'smartboard'
-        
-    Returns:
-        Contour points of detected board or None if detection fails
-    """
+    """Detect board contour based on mode: whiteboard / smartboard / auto"""
     img_area = image.shape[0] * image.shape[1]
 
     def whiteboard_detector():
@@ -57,21 +48,15 @@ def detect_board(image, mode='auto'):
                 return approx
         return None
 
-    # --- Mode selection logic ---
-    if mode == 'whiteboard':
-        return whiteboard_detector()
-    elif mode == 'smartboard':
-        return smartboard_detector()
-    elif mode == 'auto':
-        contour = whiteboard_detector()
-        if contour is not None:
-            print("[Auto] Whiteboard detector succeeded.")
-            return contour
-        print("[Auto] Whiteboard detector failed. Trying smartboard detector...")
-        contour = smartboard_detector()
-        if contour is not None:
-            print("[Auto] Smartboard detector succeeded.")
-            return contour
-        return None
+
+    contour = whiteboard_detector()
+    if contour is not None:
+        print("Whiteboard detector succeeded.")
+        return contour
+    print("Whiteboard detector failed. Trying smartboard detector...")
+    contour = smartboard_detector()
+    if contour is not None:
+        print("Smartboard detector succeeded.")
+        return contour
     else:
-        raise ValueError("Invalid mode. Choose from 'auto', 'whiteboard', 'smartboard'")
+        raise Exception("Error: Cannot detect whiteboard")
