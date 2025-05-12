@@ -37,19 +37,6 @@ class WhiteboardEnhancerApp:
         self.display_mode_var = tk.StringVar(value="color")
         self.result_type_var = tk.StringVar(value="enhanced")
         
-        # Enhancement parameters
-        self.enhancement_params = {
-            'denoise_h': tk.IntVar(value=10),
-            'clahe_clip': tk.DoubleVar(value=2.0),
-            'clahe_grid': tk.IntVar(value=8),
-            'adaptive_block': tk.IntVar(value=15),
-            'adaptive_c': tk.IntVar(value=9),
-            'use_adaptive': tk.BooleanVar(value=True),
-            'threshold': tk.IntVar(value=160),
-            'blur_size': tk.IntVar(value=3),
-            'saturation_boost': tk.DoubleVar(value=1.2)
-        }
-        
         # Create UI
         self.create_menu()
         self.create_toolbar()
@@ -96,10 +83,6 @@ class WhiteboardEnhancerApp:
         # Process button
         process_btn = ttk.Button(toolbar_frame, text="Process Image", command=self.process_all)
         process_btn.pack(side=tk.LEFT, padx=5)
-        
-        # Settings button
-        settings_btn = ttk.Button(toolbar_frame, text="Threshold Settings", command=self.toggle_settings_panel)
-        settings_btn.pack(side=tk.LEFT, padx=5)
         
         # Display mode
         ttk.Label(toolbar_frame, text="Display Mode:").pack(side=tk.RIGHT, padx=(5, 5))
@@ -216,13 +199,8 @@ class WhiteboardEnhancerApp:
         self.root.update()
         
         try:
-            # Get current enhancement parameters
-            params = {}
-            for key, var in self.enhancement_params.items():
-                params[key] = var.get()
-            
-            # Apply enhancement with custom parameters
-            self.enhanced_image = enhance_whiteboard(self.warped_image, params)
+            # Apply enhancement with default parameters
+            self.enhanced_image = enhance_whiteboard(self.warped_image)
             self.status_var.set("Image enhanced.")
             
             # Update display
@@ -232,206 +210,8 @@ class WhiteboardEnhancerApp:
             messagebox.showerror("Error", f"Error enhancing image: {str(e)}")
             self.status_var.set("Error in image enhancement.")
     
-    def toggle_settings_panel(self):
-        """Toggle the visibility of the settings panel."""
-        if self.settings_panel is None or not self.settings_panel.winfo_exists():
-            self.create_settings_panel()
-        else:
-            self.settings_panel.destroy()
-            self.settings_panel = None
-    
-    def create_settings_panel(self):
-        """Create a panel with sliders for adjusting enhancement parameters."""
-        # Create a new toplevel window
-        self.settings_panel = tk.Toplevel(self.root)
-        self.settings_panel.title("Fine-tune Enhancement")
-        self.settings_panel.geometry("400x500")
-        self.settings_panel.transient(self.root)  # Make it float on top of the main window
-        
-        # Dictionary to store references to all parameter scales
-        self.param_scales = {}
-        
-        # Main frame with scrollbar
-        main_frame = ttk.Frame(self.settings_panel)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Canvas with scrollbar for many controls
-        canvas = tk.Canvas(main_frame)
-        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        
-        # Add controls for each parameter
-        ttk.Label(scrollable_frame, text="Fine-tune Enhancement", font=("Arial", 12, "bold")).pack(pady=10)
-        
-        # Thresholding parameters - most important for fine-tuning
-        ttk.Label(scrollable_frame, text="Thresholding", font=("Arial", 10, "bold")).pack(pady=5)
-        
-        # Adaptive threshold checkbox
-        adaptive_frame = ttk.Frame(scrollable_frame)
-        adaptive_frame.pack(fill="x", pady=5)
-        adaptive_check = ttk.Checkbutton(adaptive_frame, text="Use Adaptive Threshold", 
-                                       variable=self.enhancement_params['use_adaptive'],
-                                       command=self.update_threshold_controls)
-        adaptive_check.pack(side="left", padx=5)
-        
-        # Adaptive threshold parameters
-        self.adaptive_frame = ttk.LabelFrame(scrollable_frame, text="Adaptive Threshold Settings")
-        self.adaptive_frame.pack(fill="x", pady=5, padx=5)
-        self.create_slider(self.adaptive_frame, "Block Size", "adaptive_block", 3, 51, 2)
-        self.create_slider(self.adaptive_frame, "C Value", "adaptive_c", -10, 30, 1)
-        
-        # Global threshold parameter
-        self.global_frame = ttk.LabelFrame(scrollable_frame, text="Global Threshold Settings")
-        self.global_frame.pack(fill="x", pady=5, padx=5)
-        self.create_slider(self.global_frame, "Threshold Value", "threshold", 0, 255, 1)
-        
-        # Contrast enhancement
-        ttk.Separator(scrollable_frame).pack(fill="x", pady=10)
-        ttk.Label(scrollable_frame, text="Contrast Enhancement", font=("Arial", 10, "bold")).pack(pady=5)
-        self.create_slider(scrollable_frame, "CLAHE Clip Limit", "clahe_clip", 0.5, 5.0, 0.1)
-        
-        # Final processing
-        ttk.Separator(scrollable_frame).pack(fill="x", pady=10)
-        ttk.Label(scrollable_frame, text="Final Processing", font=("Arial", 10, "bold")).pack(pady=5)
-        self.create_slider(scrollable_frame, "Denoising Strength", "denoise_h", 0, 30, 1)
-        self.create_slider(scrollable_frame, "Median Blur Size", "blur_size", 0, 9, 2)
-        
-        # Buttons
-        button_frame = ttk.Frame(scrollable_frame)
-        button_frame.pack(fill="x", pady=15)
-        
-        ttk.Button(button_frame, text="Apply", command=self.enhance_image).pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Reset to Defaults", command=self.reset_parameters).pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Close", command=self.settings_panel.destroy).pack(side="right", padx=5)
-        
-        # Update threshold controls visibility
-        self.update_threshold_controls()
-    
-    def create_slider(self, parent, label_text, param_key, min_val, max_val, step):
-        """Create a labeled slider for a parameter."""
-        frame = ttk.Frame(parent)
-        frame.pack(fill="x", pady=5)
-        
-        ttk.Label(frame, text=label_text).pack(side="top", anchor="w")
-        
-        slider_frame = ttk.Frame(frame)
-        slider_frame.pack(fill="x")
-        
-        # For float values, multiply by 10 or 100 to get integer steps for the scale widget
-        if isinstance(self.enhancement_params[param_key], tk.DoubleVar):
-            # Determine multiplier based on step size
-            if step < 0.01:
-                multiplier = 1000
-            elif step < 0.1:
-                multiplier = 100
-            else:
-                multiplier = 10
-                
-            scale = ttk.Scale(slider_frame, from_=min_val*multiplier, to=max_val*multiplier, 
-                             command=lambda v, pk=param_key, m=multiplier: self.update_param_value(pk, float(v)/m))
-            scale.set(self.enhancement_params[param_key].get() * multiplier)
-        else:
-            scale = ttk.Scale(slider_frame, from_=min_val, to=max_val, 
-                             command=lambda v, pk=param_key: self.update_param_value(pk, int(float(v))))
-            scale.set(self.enhancement_params[param_key].get())
-        
-        scale.pack(side="left", fill="x", expand=True)
-        
-        # Value display
-        value_var = tk.StringVar(value=str(self.enhancement_params[param_key].get()))
-        value_label = ttk.Label(slider_frame, textvariable=value_var, width=5)
-        value_label.pack(side="right", padx=5)
-        
-        # Store references to update the label when slider moves
-        scale.value_var = value_var
-        
-        # Store reference to the scale in the dictionary
-        self.param_scales[param_key] = scale
-        
-        return scale
-    
-    def update_param_value(self, param_key, value):
-        """Update parameter value and its display."""
-        self.enhancement_params[param_key].set(value)
-        
-        # Store the value in the scale's value_var directly
-        # This avoids the need to search through all widgets
-        if hasattr(self, 'param_scales') and param_key in self.param_scales:
-            scale = self.param_scales[param_key]
-            if hasattr(scale, 'value_var'):
-                scale.value_var.set(f"{value:.1f}" if isinstance(value, float) else str(value))
-    
-    def update_threshold_controls(self):
-        """Update the visibility of threshold controls based on the adaptive checkbox."""
-        if not hasattr(self, 'adaptive_frame') or not hasattr(self, 'global_frame'):
-            return
-            
-        use_adaptive = self.enhancement_params['use_adaptive'].get()
-        
-        if use_adaptive:
-            self.adaptive_frame.pack(fill="x", pady=5, padx=5)
-            self.global_frame.pack_forget()
-        else:
-            self.adaptive_frame.pack_forget()
-            self.global_frame.pack(fill="x", pady=5, padx=5)
-    
-    def reset_parameters(self):
-        """Reset all parameters to their default values."""
-        default_values = {
-            'denoise_h': 10,
-            'clahe_clip': 2.0,
-            'clahe_grid': 8,
-            'adaptive_block': 15,
-            'adaptive_c': 9,
-            'use_adaptive': True,
-            'threshold': 160,
-            'blur_size': 3,
-            'saturation_boost': 1.2
-        }
-        
-        # Set the values in the variables
-        for key, value in default_values.items():
-            self.enhancement_params[key].set(value)
-        
-        # Update all sliders using the param_scales dictionary
-        if hasattr(self, 'param_scales'):
-            for param_key, scale in self.param_scales.items():
-                if param_key in default_values:
-                    value = default_values[param_key]
-                    
-                    # Set the scale value
-                    if isinstance(value, float):
-                        # For float values, determine the appropriate multiplier
-                        if hasattr(scale, 'cget'):
-                            # Calculate multiplier based on the scale's range
-                            scale_range = float(scale.cget('to')) - float(scale.cget('from_'))
-                            if scale_range > 100:
-                                multiplier = 100
-                            elif scale_range > 10:
-                                multiplier = 10
-                            else:
-                                multiplier = 1
-                            scale.set(value * multiplier)
-                    else:
-                        scale.set(value)
-                    
-                    # Update the displayed value
-                    if hasattr(scale, 'value_var'):
-                        scale.value_var.set(f"{value:.1f}" if isinstance(value, float) else str(value))
-        
-        # Update threshold controls visibility
-        self.update_threshold_controls()
+
+
     
     def process_all(self):
         """Process the image through all steps."""
@@ -463,13 +243,8 @@ class WhiteboardEnhancerApp:
             self.status_var.set("Enhancing image...")
             self.root.update()
             
-            # Get current enhancement parameters
-            params = {}
-            for key, var in self.enhancement_params.items():
-                params[key] = var.get()
-            
-            # Apply enhancement with custom parameters
-            self.enhanced_image = enhance_whiteboard(self.warped_image, params)
+            # Apply enhancement with default parameters
+            self.enhanced_image = enhance_whiteboard(self.warped_image)
             
             self.status_var.set("Processing complete.")
             
