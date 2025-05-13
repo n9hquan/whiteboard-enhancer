@@ -1,5 +1,6 @@
 import os
 import cv2
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import tkinter as tk
@@ -16,7 +17,7 @@ class BatchProcessorGUI:
         self.root.title("Whiteboard Batch Processor")
         self.root.geometry("1200x800")
         
-        self.images_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
+        self.images_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images-full")
         self.image_files = self.get_image_files()
         self.current_index = 0
         self.processed_images = []
@@ -36,6 +37,10 @@ class BatchProcessorGUI:
         # Image info label
         self.info_label = ttk.Label(control_frame, text="")
         self.info_label.pack(side=tk.LEFT, padx=20)
+        
+        # Average confidence
+        self.confidence_label = ttk.Label(control_frame, text="")
+        self.confidence_label.pack(side=tk.LEFT, padx=20)
         
         # Save buttons
         ttk.Button(control_frame, text="Save Current as PDF", command=self.save_current_pdf).pack(side=tk.RIGHT, padx=5)
@@ -57,9 +62,15 @@ class BatchProcessorGUI:
         # Display first image
         if self.image_files:
             self.update_display()
+            self.update_statistics()
     
     def get_image_files(self):
         """Get all image files from the images folder"""
+        if not os.path.exists(self.images_folder):
+            os.makedirs(self.images_folder, exist_ok=True)
+            messagebox.showinfo("Info", f"Created images folder at {self.images_folder}. Please add images there.")
+            return []
+            
         valid_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
         return [f for f in os.listdir(self.images_folder) 
                 if os.path.isfile(os.path.join(self.images_folder, f)) 
@@ -81,13 +92,14 @@ class BatchProcessorGUI:
                     continue
                 
                 # Detect whiteboard
-                contour = detect_board(image)
+                contour, confidence = detect_board(image)
                 
                 if contour is None:
                     self.processed_images.append({
                         'filename': img_file,
                         'original': image,
-                        'error': 'Could not detect whiteboard contour'
+                        'error': 'Could not detect whiteboard contour',
+                        'confidence': 0.0
                     })
                     continue
                 
@@ -101,7 +113,8 @@ class BatchProcessorGUI:
                     'original': image,
                     'contour': contour,
                     'warped': warped,
-                    'enhanced': enhanced
+                    'enhanced': enhanced,
+                    'confidence': confidence
                 })
             except Exception as e:
                 self.processed_images.append({
@@ -124,7 +137,8 @@ class BatchProcessorGUI:
         filename = current['filename']
         
         # Update info label
-        self.info_label.config(text=f"Image {self.current_index + 1} of {len(self.image_files)}: {filename}")
+        confidence_text = f" (Confidence: {current.get('confidence', 0.0):.2f})" if 'confidence' in current else ""
+        self.info_label.config(text=f"Image {self.current_index + 1} of {len(self.image_files)}: {filename}{confidence_text}")
         
         if 'error' in current:
             # Display error message
@@ -152,6 +166,13 @@ class BatchProcessorGUI:
         
         plt.tight_layout()
         self.canvas.draw()
+    
+    def update_statistics(self):
+        """Average confidence of detection"""
+        confidence_values = [img.get('confidence', 0.0) for img in self.processed_images if 'confidence' in img]
+        avg_confidence = sum(confidence_values) / len(confidence_values) if confidence_values else 0
+        self.confidence_label.config(text=f"Avg Confidence: {avg_confidence:.2f}")
+
     
     def next_image(self):
         """Go to next image"""
