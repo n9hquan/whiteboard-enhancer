@@ -82,3 +82,11 @@ from whiteboard_enhancer.utils import save_as_pdf
   - `enhancer.py`: Image enhancement
   - `utils.py`: Utility functions
   - `ui.py`: User interface components
+
+## Show Details
+
+### For standard visualization
+python src/process_visualizer.py path/to/image.jpg --output output_folder
+
+### For detailed detection visualization
+python src/process_visualizer.py path/to/image.jpg --output output_folder --detailed-detection
